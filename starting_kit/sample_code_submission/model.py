@@ -10,7 +10,16 @@ import pickle
 import numpy as np   # We recommend to use numpy arrays
 from os.path import isfile
 from sklearn.base import BaseEstimator
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+import numpy as np 
+from sklearn import linear_model
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA,TruncatedSVD
+from sklearn.metrics import make_scorer
+from sklearn.model_selection import cross_val_score
+from libscores import get_metric
+
 
 class model (BaseEstimator):
     def __init__(self):
@@ -18,11 +27,12 @@ class model (BaseEstimator):
         This constructor is supposed to initialize data members.
         Use triple quotes for function documentation. 
         '''
-        self.num_train_samples=0
-        self.num_feat=1
+        self.num_train_samples= 38563
+        self.num_feat=59
         self.num_labels=1
         self.is_trained=False
-        self.mod = RandomForestRegressor(max_depth=20, random_state=0,  n_estimators=100) # Initalizing the model 
+        self.preprocess = PCA(n_components=10)
+        self.mod = DecisionTreeRegressor(max_depth = 11, max_features = 33, min_samples_leaf = 29, min_samples_split = 12) 
     
     def fit(self, X, y):
         '''
@@ -38,15 +48,11 @@ class model (BaseEstimator):
         Use data_converter.convert_to_num() to convert to the category number format.
         For regression, labels are continuous values.
         '''
-        self.num_train_samples = X.shape[0]
         if X.ndim>1: self.num_feat = X.shape[1]
-        print("FIT: dim(X)= [{:d}, {:d}]".format(self.num_train_samples, self.num_feat))
-        num_train_samples = y.shape[0]
         if y.ndim>1: self.num_labels = y.shape[1]
-        print("FIT: dim(y)= [{:d}, {:d}]".format(num_train_samples, self.num_labels))
-        if (self.num_train_samples != num_train_samples):
-            print("ARRGH: number of samples in X and y do not match!")
-        self.mod.fit(X,y)
+
+        X_preprocess = self.preprocess.fit_transform(X)
+        self.mod.fit(X_preprocess, y)
         self.is_trained = True
 
     def predict(self, X):
@@ -63,22 +69,39 @@ class model (BaseEstimator):
         '''
         num_test_samples = X.shape[0]
         if X.ndim>1: num_feat = X.shape[1]
-        print("PREDICT: dim(X)= [{:d}, {:d}]".format(num_test_samples, num_feat))
-        if (self.num_feat != num_feat):
-            print("ARRGH: number of features in X does not match training data!")
-        print("PREDICT: dim(y)= [{:d}, {:d}]".format(num_test_samples, self.num_labels))
         y = np.zeros([num_test_samples, self.num_labels])
-        # If you uncomment the next line, you get pretty good results for the Iris data :-)
-        y = self.mod.predict(X)
+
+
+        X_preprocess = self.preprocess.transform(X)
+        y = self.mod.predict(X_preprocess)
         return y
 
     def save(self, path="./"):
-        pickle.dump(self, open(path + '_model.pickle', "wb"))
+        pass
 
     def load(self, path="./"):
-        modelfile = path + '_model.pickle'
-        if isfile(modelfile):
-            with open(modelfile, 'rb') as f:
-                self = pickle.load(f)
-            print("Model reloaded from: " + modelfile)
-        return self
+        pass
+def test():
+    # Load votre model
+    mod = DecisionTreeRegressor(max_depth = 11, max_features = 33, min_samples_leaf = 29, min_samples_split = 12) 
+    # 1 - créer un data X_random et y_random fictives: utiliser https://docs.scipy.org/doc/numpy-1.14.0/reference/generated/numpy.random.rand.html
+    X_random = np.random.rand(100,100)
+    Y_random = np.random.rand(100)
+    # 2 - Tester l'entrainement avec mod.fit(X_random, y_random)
+    mod.fit(X_random, Y_random)
+    Y_hat_train = mod.predict(X_random)
+    # 3 - Test la prediction: mod.predict(X_random)
+    Y = mod.predict(X_random)
+    metric_name, scoring_function = get_metric()
+    print('Using scoring metric:', metric_name)
+    print('Training score for the', metric_name, 'metric = %5.4f' % scoring_function(Y_random, Y_hat_train))
+    print('Training score for the', metric_name, 'metric = %5.4f' % scoring_function(Y_random, Y_random))
+    print('Ideal score for the', metric_name, 'metric = %5.4f' % scoring_function(Y_random, Y_random))
+    scores = cross_val_score(mod, X_random, Y_random, cv=5, scoring=make_scorer(scoring_function))
+    print('\nCV score (95 perc. CI): %0.2f (+/- %0.2f)' % (scores.mean(), scores.std() * 2))
+
+    # Pour tester cette fonction *test*, il suffit de lancer la commande ```python sample_code_submission/model.py```
+
+if __name__ == "__main__":
+    test()
+
